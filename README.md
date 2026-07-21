@@ -1,6 +1,6 @@
-# 墨读
+# mdreader
 
-墨读是一款专注于本地阅读体验的桌面 Markdown 阅读器，基于 Tauri 2、React 和 TypeScript 构建，支持 Windows 和 macOS。
+mdreader 是一款专注于本地阅读体验的桌面 Markdown 阅读器，基于 Tauri 2、React 和 TypeScript 构建，支持 Windows 和 macOS。
 
 ## 功能特性
 
@@ -16,7 +16,7 @@
 
 ## 界面操作
 
-启动应用后，可以通过顶部工具栏打开 Markdown 文件或包含 Markdown 文档的目录。打开目录后，墨读会递归扫描其中的 `.md` 和 `.markdown` 文件，并自动忽略隐藏目录、`node_modules` 和 `target`。
+启动应用后，可以通过顶部工具栏打开 Markdown 文件或包含 Markdown 文档的目录。打开目录后，mdreader 会递归扫描其中的 `.md` 和 `.markdown` 文件，并自动忽略隐藏目录、`node_modules` 和 `target`。
 
 | 操作 | Windows | macOS |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ npm run tauri build
 
 应用应在目标操作系统上构建：
 
-- Windows：生成 NSIS/MSI 安装包
+- Windows：生成 NSIS 安装包
 - macOS：生成 App/DMG
 
 仓库中的 GitHub Actions 工作流会在推送 `v*` 格式的标签时，同时构建 Windows 和 macOS 产物，也可以在 Actions 页面手动触发。

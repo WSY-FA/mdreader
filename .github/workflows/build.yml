@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            bundles: nsis,msi
+            bundles: nsis
             artifact: mdreader-windows
           - platform: macos-latest
             bundles: app,dmg
@@ -38,7 +38,6 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: |
-            src-tauri/target/release/bundle/**/*.msi
             src-tauri/target/release/bundle/**/*.exe
             src-tauri/target/release/bundle/**/*.dmg
             src-tauri/target/release/bundle/**/*.app

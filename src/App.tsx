@@ -486,9 +486,9 @@ function App() {
       style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <header className="topbar">
-        <div className="brand" aria-label="墨读 Markdown 阅读器">
-          <span className="brand-mark">墨</span>
-          <span>墨读</span>
+        <div className="brand" aria-label="mdreader Markdown 阅读器">
+          <span className="brand-mark">M</span>
+          <span>mdreader</span>
         </div>
         <div className="toolbar-actions">
           <button

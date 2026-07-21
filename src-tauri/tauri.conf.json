@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "墨读",
+  "productName": "mdreader",
   "version": "0.1.0",
   "identifier": "com.mdreader.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "墨读",
+        "title": "mdreader",
         "width": 1240,
         "height": 820,
         "minWidth": 780,
