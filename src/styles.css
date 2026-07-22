@@ -439,6 +439,57 @@ button:focus-visible,
   scroll-behavior: smooth;
 }
 
+.reader-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  background: #ffffff;
+}
+
+.document-outline {
+  min-width: 0;
+  overflow: auto;
+  padding: 25px 12px 38px 0;
+  border-left: 1px solid #eef0f2;
+  background: #fbfcfc;
+}
+
+.outline-heading {
+  padding: 0 9px 9px;
+  color: #717a84;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.document-outline nav {
+  display: grid;
+  gap: 1px;
+}
+
+.outline-item {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: #737c85;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-item:hover {
+  border-left-color: #9abbb7;
+  background: #eef5f3;
+  color: #176d65;
+}
+
 .markdown-body {
   width: min(100% - 64px, 820px);
   margin: 0 auto;
@@ -532,6 +583,18 @@ button:focus-visible,
   border: 0;
   background: transparent;
   color: #2b3137;
+}
+
+.markdown-body pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body pre code.hljs .hljs-comment,
+.markdown-body pre code.hljs .hljs-quote {
+  color: #6a737d;
 }
 
 .markdown-body table {
@@ -700,6 +763,16 @@ button:focus-visible,
   .markdown-body {
     width: calc(100% - 28px);
     font-size: 15px;
+  }
+}
+
+@media (max-width: 760px) {
+  .reader-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-outline {
+    display: none;
   }
 }
 

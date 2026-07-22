@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import DOMPurify from "dompurify";
+import hljs from "highlight.js/lib/common";
 import {
   ChevronDown,
   ChevronRight,
@@ -48,6 +49,17 @@ interface SessionData {
   sidebarVisible: boolean;
 }
 
+interface OutlineItem {
+  id: string;
+  level: number;
+  text: string;
+}
+
+interface RenderedMarkdown {
+  html: string;
+  outline: OutlineItem[];
+}
+
 function pathKey(path: string) {
   return path.replaceAll("\\", "/").toLocaleLowerCase();
 }
@@ -75,6 +87,14 @@ markdownRenderer.code = (token) => {
   const language = token.lang?.trim().split(/\s+/, 1)[0].toLowerCase();
   if (language === "mermaid") {
     return `<div class="mermaid">${escapeHtml(token.text)}</div>`;
+  }
+  if (language && hljs.getLanguage(language)) {
+    const highlighted = hljs.highlight(token.text, { language }).value;
+    return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+  }
+  if (!language && token.text.trim()) {
+    const highlighted = hljs.highlightAuto(token.text).value;
+    return `<pre><code class="hljs">${highlighted}</code></pre>`;
   }
   return renderCodeBlock(token);
 };
@@ -126,7 +146,7 @@ function resolveAssetPath(documentPath: string, source: string) {
   return base.join(separator);
 }
 
-function renderMarkdown(content: string, documentPath: string) {
+function renderMarkdown(content: string, documentPath: string): RenderedMarkdown {
   const parsed = marked.parse(content, {
     gfm: true,
     breaks: false,
@@ -143,6 +163,19 @@ function renderMarkdown(content: string, documentPath: string) {
     }
   });
 
+  const outline: OutlineItem[] = [];
+  template.content
+    .querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
+    .forEach((heading, index) => {
+      const id = `mdreader-heading-${index}`;
+      heading.id = id;
+      outline.push({
+        id,
+        level: Number(heading.tagName.slice(1)),
+        text: heading.textContent?.replace(/\s+/g, " ").trim() || "未命名标题",
+      });
+    });
+
   if (isTauri()) {
     template.content.querySelectorAll("img").forEach((image) => {
       const resolved = resolveAssetPath(documentPath, image.getAttribute("src") ?? "");
@@ -150,7 +183,10 @@ function renderMarkdown(content: string, documentPath: string) {
     });
   }
 
-  return template.innerHTML;
+  return {
+    html: template.innerHTML,
+    outline,
+  };
 }
 
 function TreeItem({
@@ -502,6 +538,12 @@ function App() {
       } else if (command && event.key.toLowerCase() === "w" && activePathRef.current) {
         event.preventDefault();
         closeTab(activePathRef.current);
+      } else if (
+        event.key === "F5" ||
+        (command && event.key.toLowerCase() === "r")
+      ) {
+        event.preventDefault();
+        if (activePathRef.current) void reloadDocument(activePathRef.current);
       } else if (event.key === "Tab" && event.ctrlKey && tabsRef.current.length > 1) {
         event.preventDefault();
         const currentIndex = tabsRef.current.findIndex(
@@ -515,7 +557,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [chooseFiles, chooseWorkspace, closeTab]);
+  }, [chooseFiles, chooseWorkspace, closeTab, reloadDocument]);
 
   const beginResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -540,7 +582,10 @@ function App() {
     (tab) => pathKey(tab.path) === pathKey(activePath ?? ""),
   );
   const renderedMarkdown = useMemo(
-    () => (activeTab ? renderMarkdown(activeTab.content, activeTab.path) : ""),
+    () =>
+      activeTab
+        ? renderMarkdown(activeTab.content, activeTab.path)
+        : { html: "", outline: [] },
     [activeTab],
   );
 
@@ -548,7 +593,12 @@ function App() {
     const article = articleRef.current;
     if (!article || !activeTab) return;
     void renderMermaidDiagrams(article);
-  }, [activeTab, renderedMarkdown]);
+  }, [activeTab, renderedMarkdown.html]);
+
+  const scrollToHeading = useCallback((id: string) => {
+    const heading = articleRef.current?.querySelector<HTMLElement>(`#${id}`);
+    heading?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
     <div
@@ -681,12 +731,35 @@ function App() {
                 <span>{dirname(activeTab.path)}</span>
                 <span className="document-name">{activeTab.name}</span>
               </div>
-              <div className="reader-scroll">
-                <article
-                  ref={articleRef}
-                  className="markdown-body"
-                  dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
-                />
+              <div className="reader-layout">
+                <div className="reader-scroll">
+                  <article
+                    ref={articleRef}
+                    className="markdown-body"
+                    dangerouslySetInnerHTML={{ __html: renderedMarkdown.html }}
+                  />
+                </div>
+                {renderedMarkdown.outline.length > 0 && (
+                  <aside className="document-outline" aria-label="当前文档目录">
+                    <div className="outline-heading">本文目录</div>
+                    <nav>
+                      {renderedMarkdown.outline.map((item) => (
+                        <button
+                          className="outline-item"
+                          key={item.id}
+                          style={{
+                            paddingLeft: `${8 + (item.level - 1) * 12}px`,
+                          }}
+                          title={item.text}
+                          type="button"
+                          onClick={() => scrollToHeading(item.id)}
+                        >
+                          {item.text}
+                        </button>
+                      ))}
+                    </nav>
+                  </aside>
+                )}
               </div>
             </>
           ) : (
