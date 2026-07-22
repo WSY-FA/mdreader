@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Menu } from "@tauri-apps/api/menu";
 import { open } from "@tauri-apps/plugin-dialog";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
@@ -16,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RotateCcw,
+  Type,
   X,
 } from "lucide-react";
 import { marked } from "marked";
@@ -40,6 +42,17 @@ const MIN_SIDEBAR_WIDTH = 210;
 const MAX_SIDEBAR_WIDTH = 420;
 let mermaidInitialized = false;
 
+type ReaderFont = "serif" | "rounded" | "sans";
+
+const READER_FONT_STACKS: Record<ReaderFont, string> = {
+  serif:
+    'Charter, "Bitstream Charter", "Noto Serif CJK SC", "Songti SC", Georgia, serif',
+  rounded:
+    'ui-rounded, "SF Pro Rounded", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+  sans:
+    'Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+};
+
 interface SessionData {
   workspacePath: string | null;
   workspaceName: string;
@@ -47,6 +60,7 @@ interface SessionData {
   activePath: string | null;
   sidebarWidth: number;
   sidebarVisible: boolean;
+  readerFont: ReaderFont;
 }
 
 interface OutlineItem {
@@ -71,6 +85,10 @@ function basename(path: string) {
 function dirname(path: string) {
   const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return index > 0 ? path.slice(0, index) : path;
+}
+
+function isReaderFont(value: unknown): value is ReaderFont {
+  return typeof value === "string" && value in READER_FONT_STACKS;
 }
 
 function escapeHtml(text: string) {
@@ -266,6 +284,7 @@ function App() {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(272);
+  const [readerFont, setReaderFont] = useState<ReaderFont>("serif");
   const [status, setStatus] = useState("就绪");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -274,6 +293,7 @@ function App() {
   const workspacePathRef = useRef(workspacePath);
   const activePathRef = useRef(activePath);
   const articleRef = useRef<HTMLElement | null>(null);
+  const readerMenuRef = useRef<Menu | null>(null);
   const pendingPaths = useRef(new Set<string>());
   const stalePaths = useRef(new Set<string>());
   const refreshTimers = useRef(new Map<string, number>());
@@ -439,6 +459,7 @@ function App() {
       if (typeof session.sidebarVisible === "boolean") {
         setSidebarVisible(session.sidebarVisible);
       }
+      if (isReaderFont(session.readerFont)) setReaderFont(session.readerFont);
       if (session.workspacePath) {
         await loadWorkspace(session.workspacePath, session.workspaceName);
       }
@@ -471,6 +492,7 @@ function App() {
       activePath,
       sidebarWidth,
       sidebarVisible,
+      readerFont,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   }, [
@@ -478,6 +500,7 @@ function App() {
     hydrated,
     sidebarVisible,
     sidebarWidth,
+    readerFont,
     tabs,
     workspaceName,
     workspacePath,
@@ -600,10 +623,60 @@ function App() {
     heading?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  const exportPdf = useCallback(async () => {
+    const article = articleRef.current;
+    if (!article) return;
+
+    await renderMermaidDiagrams(article);
+    const previousTitle = document.title;
+    document.title = basename(activePathRef.current ?? "mdreader").replace(
+      /\.(?:md|markdown)$/i,
+      "",
+    );
+    window.addEventListener(
+      "afterprint",
+      () => {
+        document.title = previousTitle;
+      },
+      { once: true },
+    );
+    window.print();
+  }, []);
+
+  const openReaderMenu = useCallback(async () => {
+    if (!readerMenuRef.current) {
+      readerMenuRef.current = await Menu.new({
+        items: [
+          { item: "Copy", text: "复制" },
+          { item: "SelectAll", text: "全选" },
+          { item: "Separator" },
+          {
+            id: "export-pdf",
+            text: "导出 PDF...",
+            action: () => void exportPdf(),
+          },
+        ],
+      });
+    }
+    await readerMenuRef.current.popup();
+  }, [exportPdf]);
+
+  useEffect(
+    () => () => {
+      void readerMenuRef.current?.close();
+    },
+    [],
+  );
+
   return (
     <div
       className="app-shell"
-      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      style={
+        {
+          "--sidebar-width": `${sidebarWidth}px`,
+          "--reader-font-family": READER_FONT_STACKS[readerFont],
+        } as CSSProperties
+      }
     >
       <header className="topbar">
         <div className="brand" aria-label="mdreader Markdown 阅读器">
@@ -728,11 +801,48 @@ function App() {
           {activeTab ? (
             <>
               <div className="document-bar">
-                <span>{dirname(activeTab.path)}</span>
-                <span className="document-name">{activeTab.name}</span>
+                <div className="document-path">
+                  <span>{dirname(activeTab.path)}</span>
+                  <span className="document-name">{activeTab.name}</span>
+                </div>
+                <label className="font-picker" title="阅读字体">
+                  <Type size={13} />
+                  <select
+                    aria-label="阅读字体"
+                    value={readerFont}
+                    onChange={(event) => setReaderFont(event.target.value as ReaderFont)}
+                  >
+                    <option value="serif">衬线</option>
+                    <option value="rounded">圆润</option>
+                    <option value="sans">无衬线</option>
+                  </select>
+                </label>
               </div>
-              <div className="reader-layout">
+              <div
+                className="reader-layout"
+                onContextMenu={(event) => {
+                  if (!isTauri()) return;
+                  event.preventDefault();
+                  void openReaderMenu();
+                }}
+              >
                 <div className="reader-scroll">
+                  {renderedMarkdown.outline.length > 0 && (
+                    <nav className="print-outline" aria-label="PDF 文档目录">
+                      <h1>目录</h1>
+                      <ol>
+                        {renderedMarkdown.outline.map((item) => (
+                          <li
+                            data-level={item.level}
+                            key={item.id}
+                            style={{ marginLeft: `${(item.level - 1) * 14}px` }}
+                          >
+                            <a href={`#${item.id}`}>{item.text}</a>
+                          </li>
+                        ))}
+                      </ol>
+                    </nav>
+                  )}
                   <article
                     ref={articleRef}
                     className="markdown-body"
@@ -746,6 +856,7 @@ function App() {
                       {renderedMarkdown.outline.map((item) => (
                         <button
                           className="outline-item"
+                          data-level={item.level}
                           key={item.id}
                           style={{
                             paddingLeft: `${8 + (item.level - 1) * 12}px`,

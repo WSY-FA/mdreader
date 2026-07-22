@@ -415,7 +415,14 @@ button:focus-visible,
   font-size: 10px;
 }
 
-.document-bar > span:first-child {
+.document-path {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.document-path > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -430,6 +437,32 @@ button:focus-visible,
   content: "/";
   margin-right: 4px;
   color: #b0b5bb;
+}
+
+.font-picker {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: #6f7882;
+}
+
+.font-picker select {
+  height: 23px;
+  padding: 0 20px 0 5px;
+  border: 1px solid #d9dde1;
+  border-radius: 4px;
+  outline: 0;
+  background: #ffffff;
+  color: #555e68;
+  cursor: pointer;
+  font: inherit;
+}
+
+.font-picker select:focus-visible {
+  border-color: #167d73;
+  box-shadow: 0 0 0 1px #167d73;
 }
 
 .reader-scroll {
@@ -490,14 +523,34 @@ button:focus-visible,
   color: #176d65;
 }
 
+.outline-item[data-level="1"] {
+  margin-top: 4px;
+  color: #3d464f;
+  font-weight: 750;
+}
+
+.outline-item[data-level="1"]:first-child {
+  margin-top: 0;
+}
+
+.print-outline {
+  display: none;
+}
+
 .markdown-body {
   width: min(100% - 64px, 820px);
   margin: 0 auto;
   padding: 46px 0 96px;
   color: #272c32;
-  font-family:
-    Charter, "Bitstream Charter", "Noto Serif CJK SC", "Songti SC", Georgia,
-    serif;
+  font-family: var(
+    --reader-font-family,
+    Charter,
+    "Bitstream Charter",
+    "Noto Serif CJK SC",
+    "Songti SC",
+    Georgia,
+    serif
+  );
   font-size: 16px;
   line-height: 1.78;
   overflow-wrap: anywhere;
@@ -511,6 +564,7 @@ button:focus-visible,
   font-family:
     Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   font-weight: 700;
+  scroll-margin-top: 18px;
 }
 
 .markdown-body h1 {
@@ -773,6 +827,100 @@ button:focus-visible,
 
   .document-outline {
     display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 16mm 15mm 18mm;
+  }
+
+  html,
+  body,
+  #root,
+  .app-shell,
+  .workspace,
+  .main-area,
+  .reader-layout,
+  .reader-scroll {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  .app-shell,
+  .workspace,
+  .main-area,
+  .reader-layout {
+    display: block;
+  }
+
+  .topbar,
+  .sidebar,
+  .sidebar-resizer,
+  .tab-strip,
+  .document-bar,
+  .document-outline,
+  .empty-reader {
+    display: none !important;
+  }
+
+  .print-outline {
+    display: block;
+    break-after: page;
+    color: #20252b;
+    font-family: var(--reader-font-family);
+  }
+
+  .print-outline h1 {
+    margin: 0 0 20px;
+    font-size: 24pt;
+  }
+
+  .print-outline ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .print-outline li {
+    margin-bottom: 6px;
+  }
+
+  .print-outline li[data-level="1"] {
+    font-weight: 750;
+  }
+
+  .print-outline a {
+    color: #20252b;
+    text-decoration: none;
+  }
+
+  .markdown-body {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    font-size: 11pt;
+    line-height: 1.62;
+    print-color-adjust: exact;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
+    break-after: avoid-page;
+  }
+
+  .markdown-body pre,
+  .markdown-body table,
+  .markdown-body img,
+  .markdown-body .mermaid {
+    break-inside: avoid-page;
   }
 }
 
