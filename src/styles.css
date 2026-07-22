@@ -568,6 +568,20 @@ button:focus-visible,
   margin: 1.6em auto;
 }
 
+.markdown-body .mermaid {
+  overflow-x: auto;
+  margin: 1.75em 0;
+  padding: 10px 0;
+  text-align: center;
+}
+
+.markdown-body .mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
 .markdown-body input[type="checkbox"] {
   accent-color: #167d73;
 }

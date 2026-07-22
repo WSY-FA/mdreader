@@ -10,7 +10,6 @@ export interface DocumentTab {
   path: string;
   content: string;
   modifiedAt: number;
-  refreshedAt?: number;
 }
 
 export interface FileChangePayload {

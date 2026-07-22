@@ -37,6 +37,7 @@ import type {
 const SESSION_KEY = "mdreader.session.v1";
 const MIN_SIDEBAR_WIDTH = 210;
 const MAX_SIDEBAR_WIDTH = 420;
+let mermaidInitialized = false;
 
 interface SessionData {
   workspacePath: string | null;
@@ -58,6 +59,46 @@ function basename(path: string) {
 function dirname(path: string) {
   const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return index > 0 ? path.slice(0, index) : path;
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+const markdownRenderer = new marked.Renderer();
+const renderCodeBlock = markdownRenderer.code.bind(markdownRenderer);
+markdownRenderer.code = (token) => {
+  const language = token.lang?.trim().split(/\s+/, 1)[0].toLowerCase();
+  if (language === "mermaid") {
+    return `<div class="mermaid">${escapeHtml(token.text)}</div>`;
+  }
+  return renderCodeBlock(token);
+};
+
+async function renderMermaidDiagrams(container: HTMLElement) {
+  if (!container.querySelector(".mermaid")) return;
+
+  const { default: mermaid } = await import("mermaid");
+  if (!container.isConnected) return;
+  if (!mermaidInitialized) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      suppressErrorRendering: true,
+      theme: "neutral",
+    });
+    mermaidInitialized = true;
+  }
+
+  const diagrams = container.querySelectorAll<HTMLElement>(".mermaid");
+  await mermaid.run({
+    nodes: diagrams,
+    suppressErrors: true,
+  });
 }
 
 function resolveAssetPath(documentPath: string, source: string) {
@@ -89,6 +130,7 @@ function renderMarkdown(content: string, documentPath: string) {
   const parsed = marked.parse(content, {
     gfm: true,
     breaks: false,
+    renderer: markdownRenderer,
   }) as string;
   const clean = DOMPurify.sanitize(parsed);
   const template = document.createElement("template");
@@ -195,7 +237,9 @@ function App() {
   const tabsRef = useRef(tabs);
   const workspacePathRef = useRef(workspacePath);
   const activePathRef = useRef(activePath);
+  const articleRef = useRef<HTMLElement | null>(null);
   const pendingPaths = useRef(new Set<string>());
+  const stalePaths = useRef(new Set<string>());
   const refreshTimers = useRef(new Map<string, number>());
   const treeRefreshTimer = useRef<number | null>(null);
 
@@ -258,22 +302,36 @@ function App() {
   }, []);
 
   const reloadDocument = useCallback(async (path: string) => {
-    try {
-      const document = await invoke<DocumentTab>("read_markdown_file", { path });
-      setTabs((current) =>
-        current.map((tab) =>
-          pathKey(tab.path) === pathKey(document.path)
-            ? { ...document, refreshedAt: Date.now() }
-            : tab,
-        ),
-      );
-      if (pathKey(activePathRef.current ?? "") === pathKey(document.path)) {
-        setStatus(`已自动更新 · ${new Date().toLocaleTimeString()}`);
+    const requestedKey = pathKey(path);
+    if (pathKey(activePathRef.current ?? "") !== requestedKey) return;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const document = await invoke<DocumentTab>("read_markdown_file", { path });
+        if (pathKey(activePathRef.current ?? "") !== requestedKey) return;
+
+        setTabs((current) => {
+          const existing = current.find((tab) => pathKey(tab.path) === requestedKey);
+          if (!existing || existing.content === document.content) return current;
+          return current.map((tab) =>
+            pathKey(tab.path) === requestedKey ? document : tab,
+          );
+        });
+        return;
+      } catch {
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 120 * (attempt + 1)));
+        }
       }
-    } catch {
-      // Editors may briefly replace a file during an atomic save. The next event retries it.
     }
   }, []);
+
+  useEffect(() => {
+    if (!activePath) return;
+    const activeKey = pathKey(activePath);
+    if (!stalePaths.current.delete(activeKey)) return;
+    void reloadDocument(activePath);
+  }, [activePath, reloadDocument]);
 
   const chooseWorkspace = useCallback(async () => {
     if (!isTauri()) {
@@ -399,19 +457,25 @@ function App() {
 
     void listen<FileChangePayload>("file-changed", ({ payload }) => {
       const changedKey = pathKey(payload.path);
-      const openTab = tabsRef.current.find((tab) => pathKey(tab.path) === changedKey);
-      if (openTab) {
+      const activeDocument = activePathRef.current;
+      if (activeDocument && pathKey(activeDocument) === changedKey) {
         const existingTimer = refreshTimers.current.get(changedKey);
         if (existingTimer) window.clearTimeout(existingTimer);
         const timer = window.setTimeout(() => {
           refreshTimers.current.delete(changedKey);
-          void reloadDocument(openTab.path);
-        }, 140);
+          void reloadDocument(activeDocument);
+        }, 180);
         refreshTimers.current.set(changedKey, timer);
+      } else if (tabsRef.current.some((tab) => pathKey(tab.path) === changedKey)) {
+        stalePaths.current.add(changedKey);
       }
 
       const root = workspacePathRef.current;
-      if (root && changedKey.startsWith(`${pathKey(root)}/`)) {
+      const structureChanged =
+        payload.kind.startsWith("Create") ||
+        payload.kind.startsWith("Remove") ||
+        payload.kind.includes("Name(");
+      if (root && structureChanged && changedKey.startsWith(`${pathKey(root)}/`)) {
         if (treeRefreshTimer.current) window.clearTimeout(treeRefreshTimer.current);
         treeRefreshTimer.current = window.setTimeout(() => {
           void invoke<FileNode[]>("open_workspace", { path: root }).then(setTree);
@@ -479,6 +543,12 @@ function App() {
     () => (activeTab ? renderMarkdown(activeTab.content, activeTab.path) : ""),
     [activeTab],
   );
+
+  useEffect(() => {
+    const article = articleRef.current;
+    if (!article || !activeTab) return;
+    void renderMermaidDiagrams(article);
+  }, [activeTab, renderedMarkdown]);
 
   return (
     <div
@@ -590,7 +660,6 @@ function App() {
                     >
                       <FileText size={15} />
                       <span>{tab.name}</span>
-                      {tab.refreshedAt && <i title="文件已自动更新" />}
                     </button>
                     <button
                       className="tab-close"
@@ -614,8 +683,8 @@ function App() {
               </div>
               <div className="reader-scroll">
                 <article
+                  ref={articleRef}
                   className="markdown-body"
-                  key={`${activeTab.path}-${activeTab.modifiedAt}`}
                   dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
                 />
               </div>
