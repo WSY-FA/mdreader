@@ -1,0 +1,64 @@
+name: Release desktop apps
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          APP_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          test "$GITHUB_REF_NAME" = "v$APP_VERSION"
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: mdreader ${{ github.ref_name }}
+          releaseBody: |
+            mdreader 首个公开测试版本。
+
+            Windows 请下载 `.exe` 安装包，macOS 请按处理器架构下载对应的 `.dmg`。
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+          releaseAssetNamePattern: mdreader-[version]-[platform]-[arch][setup][ext]
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
