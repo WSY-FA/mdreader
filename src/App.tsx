@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Menu } from "@tauri-apps/api/menu";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
 import {
@@ -85,6 +85,10 @@ function basename(path: string) {
 function dirname(path: string) {
   const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return index > 0 ? path.slice(0, index) : path;
+}
+
+function pdfPath(path: string) {
+  return path.replace(/\.(?:md|markdown)$/i, ".pdf");
 }
 
 function isReaderFont(value: unknown): value is ReaderFont {
@@ -625,22 +629,38 @@ function App() {
 
   const exportPdf = useCallback(async () => {
     const article = articleRef.current;
-    if (!article) return;
+    const sourcePath = activePathRef.current;
+    if (!article || !sourcePath) return;
 
-    await renderMermaidDiagrams(article);
-    const previousTitle = document.title;
-    document.title = basename(activePathRef.current ?? "mdreader").replace(
-      /\.(?:md|markdown)$/i,
-      "",
-    );
-    window.addEventListener(
-      "afterprint",
-      () => {
-        document.title = previousTitle;
-      },
-      { once: true },
-    );
-    window.print();
+    try {
+      await renderMermaidDiagrams(article);
+
+      if (isTauri() && navigator.userAgent.includes("Windows")) {
+        const targetPath = await save({
+          defaultPath: pdfPath(sourcePath),
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+        if (!targetPath) return;
+
+        setStatus("正在导出 PDF");
+        await invoke("export_pdf", { path: targetPath });
+        setStatus(`PDF 已导出：${targetPath}`);
+        return;
+      }
+
+      const previousTitle = document.title;
+      document.title = basename(pdfPath(sourcePath)).replace(/\.pdf$/i, "");
+      window.addEventListener(
+        "afterprint",
+        () => {
+          document.title = previousTitle;
+        },
+        { once: true },
+      );
+      window.print();
+    } catch (error) {
+      setStatus(String(error));
+    }
   }, []);
 
   const openReaderMenu = useCallback(async () => {
@@ -827,22 +847,6 @@ function App() {
                 }}
               >
                 <div className="reader-scroll">
-                  {renderedMarkdown.outline.length > 0 && (
-                    <nav className="print-outline" aria-label="PDF 文档目录">
-                      <h1>目录</h1>
-                      <ol>
-                        {renderedMarkdown.outline.map((item) => (
-                          <li
-                            data-level={item.level}
-                            key={item.id}
-                            style={{ marginLeft: `${(item.level - 1) * 14}px` }}
-                          >
-                            <a href={`#${item.id}`}>{item.text}</a>
-                          </li>
-                        ))}
-                      </ol>
-                    </nav>
-                  )}
                   <article
                     ref={articleRef}
                     className="markdown-body"

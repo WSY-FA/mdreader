@@ -523,18 +523,18 @@ button:focus-visible,
   color: #176d65;
 }
 
+.outline-item[data-level="1"],
+.outline-item[data-level="2"] {
+  font-weight: 750;
+}
+
 .outline-item[data-level="1"] {
   margin-top: 4px;
   color: #3d464f;
-  font-weight: 750;
 }
 
 .outline-item[data-level="1"]:first-child {
   margin-top: 0;
-}
-
-.print-outline {
-  display: none;
 }
 
 .markdown-body {
@@ -864,37 +864,6 @@ button:focus-visible,
   .document-outline,
   .empty-reader {
     display: none !important;
-  }
-
-  .print-outline {
-    display: block;
-    break-after: page;
-    color: #20252b;
-    font-family: var(--reader-font-family);
-  }
-
-  .print-outline h1 {
-    margin: 0 0 20px;
-    font-size: 24pt;
-  }
-
-  .print-outline ol {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .print-outline li {
-    margin-bottom: 6px;
-  }
-
-  .print-outline li[data-level="1"] {
-    font-weight: 750;
-  }
-
-  .print-outline a {
-    color: #20252b;
-    text-decoration: none;
   }
 
   .markdown-body {

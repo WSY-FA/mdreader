@@ -51,12 +51,8 @@ struct AppState {
 }
 
 fn canonicalize(path: impl AsRef<Path>) -> Result<PathBuf, String> {
-    fs::canonicalize(path.as_ref()).map_err(|error| {
-        format!(
-            "无法访问路径 {}：{error}",
-            path.as_ref().to_string_lossy()
-        )
-    })
+    fs::canonicalize(path.as_ref())
+        .map_err(|error| format!("无法访问路径 {}：{error}", path.as_ref().to_string_lossy()))
 }
 
 fn path_to_string(path: &Path) -> String {
@@ -132,10 +128,7 @@ fn register_watch(
     if registry.watched_paths.insert(path.to_path_buf()) {
         if let Err(error) = registry.watcher.watch(path, mode) {
             registry.watched_paths.remove(path);
-            return Err(format!(
-                "无法监听路径 {}：{error}",
-                path.to_string_lossy()
-            ));
+            return Err(format!("无法监听路径 {}：{error}", path.to_string_lossy()));
         }
     }
 
@@ -232,6 +225,68 @@ fn focus_and_open(app: &tauri::AppHandle, paths: Vec<String>) {
     let _ = app.emit("open-files", OpenFilesPayload { paths });
 }
 
+#[tauri::command]
+async fn export_pdf(window: tauri::WebviewWindow, path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use webview2_com::{
+            Microsoft::Web::WebView2::Win32::{ICoreWebView2PrintSettings, ICoreWebView2_7},
+            PrintToPdfCompletedHandler,
+        };
+        use windows::core::{Interface, HSTRING};
+
+        let (sender, mut receiver) = tauri::async_runtime::channel(1);
+        window
+            .with_webview(move |webview| {
+                let result = (|| -> Result<(), String> {
+                    let controller = webview.controller();
+                    let core_webview = unsafe { controller.CoreWebView2() }
+                        .map_err(|error| format!("无法访问 WebView2：{error}"))?;
+                    let printable = core_webview
+                        .cast::<ICoreWebView2_7>()
+                        .map_err(|error| format!("当前 WebView2 不支持 PDF 导出：{error}"))?;
+                    let output_path = HSTRING::from(path);
+                    let completion_sender = sender.clone();
+                    let handler =
+                        PrintToPdfCompletedHandler::create(Box::new(move |error_code, success| {
+                            let result = if error_code.is_ok() && success {
+                                Ok(())
+                            } else {
+                                Err(format!("PDF 导出失败：{error_code:?}"))
+                            };
+                            let _ = completion_sender.try_send(result);
+                            Ok(())
+                        }));
+
+                    unsafe {
+                        printable.PrintToPdf(
+                            &output_path,
+                            None::<&ICoreWebView2PrintSettings>,
+                            &handler,
+                        )
+                    }
+                    .map_err(|error| format!("无法启动 PDF 导出：{error}"))
+                })();
+
+                if let Err(error) = result {
+                    let _ = sender.try_send(Err(error));
+                }
+            })
+            .map_err(|error| format!("无法访问阅读器窗口：{error}"))?;
+
+        receiver
+            .recv()
+            .await
+            .ok_or_else(|| "PDF 导出未返回结果".to_string())?
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (window, path);
+        Err("当前平台不支持直接导出 PDF".to_string())
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
@@ -278,7 +333,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_workspace,
             read_markdown_file,
-            initial_markdown_files
+            initial_markdown_files,
+            export_pdf
         ])
         .build(tauri::generate_context!())
         .expect("error while building mdreader");
