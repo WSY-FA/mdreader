@@ -191,6 +191,51 @@ fn initial_markdown_files(state: State<'_, AppState>) -> Vec<String> {
     paths
 }
 
+#[tauri::command]
+fn open_containing_folder(path: String) -> Result<(), String> {
+    let file_path = canonicalize(path)?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| "无法确定文件所在目录".to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        use std::process::Command;
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let raw_path = file_path.to_string_lossy();
+        let explorer_path = raw_path
+            .strip_prefix(r"\\?\UNC\")
+            .map(|path| format!(r"\\{path}"))
+            .or_else(|| raw_path.strip_prefix(r"\\?\").map(str::to_owned))
+            .unwrap_or_else(|| raw_path.into_owned());
+
+        Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(explorer_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|error| format!("无法打开文件所在目录：{error}"))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&file_path)
+        .spawn()
+        .map_err(|error| format!("无法打开文件所在目录：{error}"))?;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::process::Command::new("xdg-open")
+        .arg(parent)
+        .spawn()
+        .map_err(|error| format!("无法打开文件所在目录：{error}"))?;
+
+    Ok(())
+}
+
 fn markdown_paths_from_args<I>(args: I) -> Vec<String>
 where
     I: IntoIterator,
@@ -334,6 +379,7 @@ pub fn run() {
             open_workspace,
             read_markdown_file,
             initial_markdown_files,
+            open_containing_folder,
             export_pdf
         ])
         .build(tauri::generate_context!())

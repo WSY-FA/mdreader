@@ -663,6 +663,17 @@ function App() {
     }
   }, []);
 
+  const openContainingFolder = useCallback(async () => {
+    const sourcePath = activePathRef.current;
+    if (!sourcePath) return;
+
+    try {
+      await invoke("open_containing_folder", { path: sourcePath });
+    } catch (error) {
+      setStatus(String(error));
+    }
+  }, []);
+
   const openReaderMenu = useCallback(async () => {
     if (!readerMenuRef.current) {
       readerMenuRef.current = await Menu.new({
@@ -670,6 +681,11 @@ function App() {
           { item: "Copy", text: "复制" },
           { item: "SelectAll", text: "全选" },
           { item: "Separator" },
+          {
+            id: "open-containing-folder",
+            text: "打开文件所在目录",
+            action: () => void openContainingFolder(),
+          },
           {
             id: "export-pdf",
             text: "导出 PDF...",
@@ -679,7 +695,7 @@ function App() {
       });
     }
     await readerMenuRef.current.popup();
-  }, [exportPdf]);
+  }, [exportPdf, openContainingFolder]);
 
   useEffect(
     () => () => {

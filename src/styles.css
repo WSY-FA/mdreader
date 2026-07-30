@@ -475,7 +475,7 @@ button:focus-visible,
 .reader-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
+  grid-template-columns: minmax(0, 1fr) 176px;
   background: #ffffff;
 }
 
@@ -538,7 +538,7 @@ button:focus-visible,
 }
 
 .markdown-body {
-  width: min(100% - 64px, 820px);
+  width: min(100% - 48px, 1080px);
   margin: 0 auto;
   padding: 46px 0 96px;
   color: #272c32;
