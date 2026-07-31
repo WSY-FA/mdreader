@@ -41,11 +41,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri -> target
-      - name: Verify tag matches app version
+      - name: Set app version from tag
         shell: bash
         run: |
-          APP_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
-          test "$GITHUB_REF_NAME" = "v$APP_VERSION"
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          node -e 'const fs = require("fs"); const path = "src-tauri/tauri.conf.json"; const config = JSON.parse(fs.readFileSync(path, "utf8")); config.version = process.argv[1]; fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);' "$RELEASE_VERSION"
       - run: npm ci
       - uses: tauri-apps/tauri-action@v1
         env:
@@ -54,7 +54,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: mdreader ${{ github.ref_name }}
           releaseBody: |
-            mdreader 首个公开测试版本。
+            mdreader 测试版本。
 
             Windows 请下载 `.exe` 安装包，macOS 请按处理器架构下载对应的 `.dmg`。
           releaseDraft: false
